@@ -58,9 +58,9 @@ import com.google.android.exoplayer2.mediacodec.MediaCodecRenderer;
 import com.google.android.exoplayer2.mediacodec.MediaCodecSelector;
 import com.google.android.exoplayer2.mediacodec.MediaCodecUtil;
 import com.google.android.exoplayer2.mediacodec.MediaCodecUtil.DecoderQueryException;
-import com.google.android.exoplayer2.mediacodec.MediaFormatUtil;
 import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.Log;
+import com.google.android.exoplayer2.util.MediaFormatUtil;
 import com.google.android.exoplayer2.util.MimeTypes;
 import com.google.android.exoplayer2.util.TraceUtil;
 import com.google.android.exoplayer2.util.Util;
@@ -76,8 +76,9 @@ import java.util.List;
  * on the playback thread:
  *
  * <ul>
- *   <li>Message with type {@link #MSG_SET_SURFACE} to set the output surface. The message payload
- *       should be the target {@link Surface}, or null.
+ *   <li>Message with type {@link #MSG_SET_VIDEO_OUTPUT} to set the output. The message payload
+ *       should be the target {@link Surface}, or null to clear the output. Other non-null payloads
+ *       have the effect of clearing the output.
  *   <li>Message with type {@link #MSG_SET_SCALING_MODE} to set the video scaling mode. The message
  *       payload should be one of the integer scaling modes in {@link C.VideoScalingMode}. Note that
  *       the scaling mode only applies if the {@link Surface} targeted by this renderer is owned by
@@ -123,7 +124,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
   private boolean codecHandlesHdr10PlusOutOfBandMetadata;
 
   @Nullable private Surface surface;
-  @Nullable private Surface dummySurface;
+  @Nullable private DummySurface dummySurface;
   private boolean haveReportedFirstFrameRenderedForCurrentSurface;
   @C.VideoScalingMode private int scalingMode;
   private boolean renderedFirstFrameAfterReset;
@@ -144,10 +145,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
   private int currentHeight;
   private int currentUnappliedRotationDegrees;
   private float currentPixelWidthHeightRatio;
-  private int reportedWidth;
-  private int reportedHeight;
-  private int reportedUnappliedRotationDegrees;
-  private float reportedPixelWidthHeightRatio;
+  @Nullable private VideoSize reportedVideoSize;
 
   private boolean tunneling;
   private int tunnelingAudioSessionId;
@@ -176,7 +174,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
         allowedJoiningTimeMs,
         /* eventHandler= */ null,
         /* eventListener= */ null,
-        /* maxDroppedFramesToNotify= */ -1);
+        /* maxDroppedFramesToNotify= */ 0);
   }
 
   /**
@@ -377,7 +375,10 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
             mimeType, requiresSecureDecoder, requiresTunnelingDecoder);
     decoderInfos = MediaCodecUtil.getDecoderInfosSortedByFormatSupport(decoderInfos, format);
     if (MimeTypes.VIDEO_DOLBY_VISION.equals(mimeType)) {
-      // Fall back to H.264/AVC or H.265/HEVC for the relevant DV profiles.
+      // Fall back to H.264/AVC or H.265/HEVC for the relevant DV profiles. This can't be done for
+      // profile CodecProfileLevel.DolbyVisionProfileDvheStn and profile
+      // CodecProfileLevel.DolbyVisionProfileDvheDtb because the first one is not backward
+      // compatible and the second one is deprecated and is not always backward compatible.
       @Nullable
       Pair<Integer, Integer> codecProfileAndLevel = MediaCodecUtil.getCodecProfileAndLevel(format);
       if (codecProfileAndLevel != null) {
@@ -485,6 +486,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
     }
   }
 
+  @TargetApi(17) // Needed for dummySurface usage. dummySurface is always null on API level 16.
   @Override
   protected void onReset() {
     try {
@@ -503,8 +505,8 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
   @Override
   public void handleMessage(int messageType, @Nullable Object message) throws ExoPlaybackException {
     switch (messageType) {
-      case MSG_SET_SURFACE:
-        setSurface((Surface) message);
+      case MSG_SET_VIDEO_OUTPUT:
+        setOutput(message);
         break;
       case MSG_SET_SCALING_MODE:
         scalingMode = (Integer) message;
@@ -530,7 +532,10 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
     }
   }
 
-  private void setSurface(Surface surface) throws ExoPlaybackException {
+  private void setOutput(@Nullable Object output) throws ExoPlaybackException {
+    // Handle unsupported (i.e., non-Surface) outputs by clearing the surface.
+    @Nullable Surface surface = output instanceof Surface ? (Surface) output : null;
+
     if (surface == null) {
       // Use a dummy surface if possible.
       if (dummySurface != null) {
@@ -543,6 +548,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
         }
       }
     }
+
     // We only need to update the codec if the surface has changed.
     if (this.surface != surface) {
       this.surface = surface;
@@ -591,13 +597,18 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
     return tunneling && Util.SDK_INT < 23;
   }
 
+  @TargetApi(17) // Needed for dummySurface usage. dummySurface is always null on API level 16.
   @Override
-  protected void configureCodec(
+  protected MediaCodecAdapter.Configuration getMediaCodecConfiguration(
       MediaCodecInfo codecInfo,
-      MediaCodecAdapter codec,
       Format format,
       @Nullable MediaCrypto crypto,
       float codecOperatingRate) {
+    if (dummySurface != null && dummySurface.secure != codecInfo.secure) {
+      // We can't re-use the current DummySurface instance with the new decoder.
+      dummySurface.release();
+      dummySurface = null;
+    }
     String codecMimeType = codecInfo.codecMimeType;
     codecMaxValues = getCodecMaxValues(codecInfo, format, getStreamFormats());
     MediaFormat mediaFormat =
@@ -617,10 +628,8 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
       }
       surface = dummySurface;
     }
-    codec.configure(mediaFormat, surface, crypto, 0);
-    if (Util.SDK_INT >= 23 && tunneling) {
-      tunnelingOnFrameRenderedListener = new OnFrameRenderedListenerV23(codec);
-    }
+    return new MediaCodecAdapter.Configuration(
+        codecInfo, mediaFormat, format, surface, crypto, /* flags= */ 0);
   }
 
   @Override
@@ -680,11 +689,21 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
     codecNeedsSetOutputSurfaceWorkaround = codecNeedsSetOutputSurfaceWorkaround(name);
     codecHandlesHdr10PlusOutOfBandMetadata =
         Assertions.checkNotNull(getCodecInfo()).isHdr10PlusOutOfBandMetadataSupported();
+    if (Util.SDK_INT >= 23 && tunneling) {
+      tunnelingOnFrameRenderedListener =
+          new OnFrameRenderedListenerV23(Assertions.checkNotNull(getCodec()));
+    }
   }
 
   @Override
   protected void onCodecReleased(String name) {
     eventDispatcher.decoderReleased(name);
+  }
+
+  @Override
+  protected void onCodecError(Exception codecError) {
+    Log.e(TAG, "Video codec error", codecError);
+    eventDispatcher.videoCodecError(codecError);
   }
 
   @Override
@@ -1185,30 +1204,29 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
   }
 
   private void clearReportedVideoSize() {
-    reportedWidth = Format.NO_VALUE;
-    reportedHeight = Format.NO_VALUE;
-    reportedPixelWidthHeightRatio = Format.NO_VALUE;
-    reportedUnappliedRotationDegrees = Format.NO_VALUE;
+    reportedVideoSize = null;
   }
 
   private void maybeNotifyVideoSizeChanged() {
     if ((currentWidth != Format.NO_VALUE || currentHeight != Format.NO_VALUE)
-      && (reportedWidth != currentWidth || reportedHeight != currentHeight
-        || reportedUnappliedRotationDegrees != currentUnappliedRotationDegrees
-        || reportedPixelWidthHeightRatio != currentPixelWidthHeightRatio)) {
-      eventDispatcher.videoSizeChanged(currentWidth, currentHeight, currentUnappliedRotationDegrees,
-          currentPixelWidthHeightRatio);
-      reportedWidth = currentWidth;
-      reportedHeight = currentHeight;
-      reportedUnappliedRotationDegrees = currentUnappliedRotationDegrees;
-      reportedPixelWidthHeightRatio = currentPixelWidthHeightRatio;
+        && (reportedVideoSize == null
+            || reportedVideoSize.width != currentWidth
+            || reportedVideoSize.height != currentHeight
+            || reportedVideoSize.unappliedRotationDegrees != currentUnappliedRotationDegrees
+            || reportedVideoSize.pixelWidthHeightRatio != currentPixelWidthHeightRatio)) {
+      reportedVideoSize =
+          new VideoSize(
+              currentWidth,
+              currentHeight,
+              currentUnappliedRotationDegrees,
+              currentPixelWidthHeightRatio);
+      eventDispatcher.videoSizeChanged(reportedVideoSize);
     }
   }
 
   private void maybeRenotifyVideoSizeChanged() {
-    if (reportedWidth != Format.NO_VALUE || reportedHeight != Format.NO_VALUE) {
-      eventDispatcher.videoSizeChanged(reportedWidth, reportedHeight,
-          reportedUnappliedRotationDegrees, reportedPixelWidthHeightRatio);
+    if (reportedVideoSize != null) {
+      eventDispatcher.videoSizeChanged(reportedVideoSize);
     }
   }
 

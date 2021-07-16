@@ -19,10 +19,15 @@ import static com.google.android.exoplayer2.util.Assertions.checkNotNull;
 import static com.google.android.exoplayer2.util.Assertions.checkState;
 
 import android.net.Uri;
+import android.os.Bundle;
+import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.offline.StreamKey;
 import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.Util;
+import java.lang.annotation.Documented;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -32,7 +37,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Representation of a media item. */
-public final class MediaItem {
+public final class MediaItem implements Bundleable {
 
   /**
    * Creates a {@link MediaItem} for the given URI.
@@ -142,32 +147,32 @@ public final class MediaItem {
     }
 
     /**
-     * Sets the optional media ID which identifies the media item. If not specified, {@link #setUri}
-     * must be called and the string representation of {@link PlaybackProperties#uri} is used as the
-     * media ID.
+     * Sets the optional media ID which identifies the media item.
+     *
+     * <p>By default {@link #DEFAULT_MEDIA_ID} is used.
      */
-    public Builder setMediaId(@Nullable String mediaId) {
-      this.mediaId = mediaId;
+    public Builder setMediaId(String mediaId) {
+      this.mediaId = checkNotNull(mediaId);
       return this;
     }
 
     /**
-     * Sets the optional URI. If not specified, {@link #setMediaId(String)} must be called.
+     * Sets the optional URI.
      *
-     * <p>If {@code uri} is null or unset no {@link PlaybackProperties} object is created during
-     * {@link #build()} and any other {@code Builder} methods that would populate {@link
-     * MediaItem#playbackProperties} are ignored.
+     * <p>If {@code uri} is null or unset then no {@link PlaybackProperties} object is created
+     * during {@link #build()} and no other {@code Builder} methods that would populate {@link
+     * MediaItem#playbackProperties} should be called.
      */
     public Builder setUri(@Nullable String uri) {
       return setUri(uri == null ? null : Uri.parse(uri));
     }
 
     /**
-     * Sets the optional URI. If not specified, {@link #setMediaId(String)} must be called.
+     * Sets the optional URI.
      *
-     * <p>If {@code uri} is null or unset no {@link PlaybackProperties} object is created during
-     * {@link #build()} and any other {@code Builder} methods that would populate {@link
-     * MediaItem#playbackProperties} are ignored.
+     * <p>If {@code uri} is null or unset then no {@link PlaybackProperties} object is created
+     * during {@link #build()} and no other {@code Builder} methods that would populate {@link
+     * MediaItem#playbackProperties} should be called.
      */
     public Builder setUri(@Nullable Uri uri) {
       this.uri = uri;
@@ -179,8 +184,7 @@ public final class MediaItem {
      *
      * <p>The MIME type may be used as a hint for inferring the type of the media item.
      *
-     * <p>If {@link #setUri} is passed a non-null {@code uri}, the MIME type is used to create a
-     * {@link PlaybackProperties} object. Otherwise it will be ignored.
+     * <p>This method should only be called if {@link #setUri} is passed a non-null value.
      *
      * @param mimeType The MIME type.
      */
@@ -242,8 +246,8 @@ public final class MediaItem {
      * Sets the optional default DRM license server URI. If this URI is set, the {@link
      * DrmConfiguration#uuid} needs to be specified as well.
      *
-     * <p>If {@link #setUri} is passed a non-null {@code uri}, the DRM license server URI is used to
-     * create a {@link PlaybackProperties} object. Otherwise it will be ignored.
+     * <p>This method should only be called if both {@link #setUri} and {@link #setDrmUuid(UUID)}
+     * are passed non-null values.
      */
     public Builder setDrmLicenseUri(@Nullable Uri licenseUri) {
       drmLicenseUri = licenseUri;
@@ -254,8 +258,8 @@ public final class MediaItem {
      * Sets the optional default DRM license server URI. If this URI is set, the {@link
      * DrmConfiguration#uuid} needs to be specified as well.
      *
-     * <p>If {@link #setUri} is passed a non-null {@code uri}, the DRM license server URI is used to
-     * create a {@link PlaybackProperties} object. Otherwise it will be ignored.
+     * <p>This method should only be called if both {@link #setUri} and {@link #setDrmUuid(UUID)}
+     * are passed non-null values.
      */
     public Builder setDrmLicenseUri(@Nullable String licenseUri) {
       drmLicenseUri = licenseUri == null ? null : Uri.parse(licenseUri);
@@ -267,7 +271,8 @@ public final class MediaItem {
      *
      * <p>{@code null} or an empty {@link Map} can be used for a reset.
      *
-     * <p>If no valid DRM configuration is specified, the DRM license request headers are ignored.
+     * <p>This method should only be called if both {@link #setUri} and {@link #setDrmUuid(UUID)}
+     * are passed non-null values.
      */
     public Builder setDrmLicenseRequestHeaders(
         @Nullable Map<String, String> licenseRequestHeaders) {
@@ -279,11 +284,13 @@ public final class MediaItem {
     }
 
     /**
-     * Sets the {@link UUID} of the protection scheme. If a DRM system UUID is set, the {@link
-     * DrmConfiguration#licenseUri} needs to be set as well.
+     * Sets the {@link UUID} of the protection scheme.
      *
-     * <p>If {@link #setUri} is passed a non-null {@code uri}, the DRM system UUID is used to create
-     * a {@link PlaybackProperties} object. Otherwise it will be ignored.
+     * <p>If {@code uuid} is null or unset then no {@link DrmConfiguration} object is created during
+     * {@link #build()} and no other {@code Builder} methods that would populate {@link
+     * MediaItem.PlaybackProperties#drmConfiguration} should be called.
+     *
+     * <p>This method should only be called if {@link #setUri} is passed a non-null value.
      */
     public Builder setDrmUuid(@Nullable UUID uuid) {
       drmUuid = uuid;
@@ -293,8 +300,8 @@ public final class MediaItem {
     /**
      * Sets whether the DRM configuration is multi session enabled.
      *
-     * <p>If {@link #setUri} is passed a non-null {@code uri}, the DRM multi session flag is used to
-     * create a {@link PlaybackProperties} object. Otherwise it will be ignored.
+     * <p>This method should only be called if both {@link #setUri} and {@link #setDrmUuid(UUID)}
+     * are passed non-null values.
      */
     public Builder setDrmMultiSession(boolean multiSession) {
       drmMultiSession = multiSession;
@@ -305,8 +312,8 @@ public final class MediaItem {
      * Sets whether to force use the default DRM license server URI even if the media specifies its
      * own DRM license server URI.
      *
-     * <p>If {@link #setUri} is passed a non-null {@code uri}, the DRM force default license flag is
-     * used to create a {@link PlaybackProperties} object. Otherwise it will be ignored.
+     * <p>This method should only be called if both {@link #setUri} and {@link #setDrmUuid(UUID)}
+     * are passed non-null values.
      */
     public Builder setDrmForceDefaultLicenseUri(boolean forceDefaultLicenseUri) {
       this.drmForceDefaultLicenseUri = forceDefaultLicenseUri;
@@ -316,6 +323,9 @@ public final class MediaItem {
     /**
      * Sets whether clear samples within protected content should be played when keys for the
      * encrypted part of the content have yet to be loaded.
+     *
+     * <p>This method should only be called if both {@link #setUri} and {@link #setDrmUuid(UUID)}
+     * are passed non-null values.
      */
     public Builder setDrmPlayClearContentWithoutKey(boolean playClearContentWithoutKey) {
       this.drmPlayClearContentWithoutKey = playClearContentWithoutKey;
@@ -328,6 +338,9 @@ public final class MediaItem {
      *
      * <p>This method overrides what has been set by previously calling {@link
      * #setDrmSessionForClearTypes(List)}.
+     *
+     * <p>This method should only be called if both {@link #setUri} and {@link #setDrmUuid(UUID)}
+     * are passed non-null values.
      */
     public Builder setDrmSessionForClearPeriods(boolean sessionForClearPeriods) {
       this.setDrmSessionForClearTypes(
@@ -348,6 +361,9 @@ public final class MediaItem {
      * #setDrmSessionForClearPeriods(boolean)}.
      *
      * <p>{@code null} or an empty {@link List} can be used for a reset.
+     *
+     * <p>This method should only be called if both {@link #setUri} and {@link #setDrmUuid(UUID)}
+     * are passed non-null values.
      */
     public Builder setDrmSessionForClearTypes(@Nullable List<Integer> sessionForClearTypes) {
       this.drmSessionForClearTypes =
@@ -364,7 +380,8 @@ public final class MediaItem {
      * release an existing offline license (see {@code DefaultDrmSessionManager#setMode(int
      * mode,byte[] offlineLicenseKeySetId)}).
      *
-     * <p>If no valid DRM configuration is specified, the key set ID is ignored.
+     * <p>This method should only be called if both {@link #setUri} and {@link #setDrmUuid(UUID)}
+     * are passed non-null values.
      */
     public Builder setDrmKeySetId(@Nullable byte[] keySetId) {
       this.drmKeySetId = keySetId != null ? Arrays.copyOf(keySetId, keySetId.length) : null;
@@ -391,8 +408,7 @@ public final class MediaItem {
     /**
      * Sets the optional custom cache key (only used for progressive streams).
      *
-     * <p>If {@link #setUri} is passed a non-null {@code uri}, the custom cache key is used to
-     * create a {@link PlaybackProperties} object. Otherwise it will be ignored.
+     * <p>This method should only be called if {@link #setUri} is passed a non-null value.
      */
     public Builder setCustomCacheKey(@Nullable String customCacheKey) {
       this.customCacheKey = customCacheKey;
@@ -404,8 +420,7 @@ public final class MediaItem {
      *
      * <p>{@code null} or an empty {@link List} can be used for a reset.
      *
-     * <p>If {@link #setUri} is passed a non-null {@code uri}, the subtitles are used to create a
-     * {@link PlaybackProperties} object. Otherwise they will be ignored.
+     * <p>This method should only be called if {@link #setUri} is passed a non-null value.
      */
     public Builder setSubtitles(@Nullable List<Subtitle> subtitles) {
       this.subtitles =
@@ -418,12 +433,11 @@ public final class MediaItem {
     /**
      * Sets the optional ad tag {@link Uri}.
      *
-     * <p>If {@link #setUri} is passed a non-null {@code uri}, the ad tag URI is used to create a
-     * {@link PlaybackProperties} object. Otherwise it will be ignored.
-     *
      * <p>Media items in the playlist with the same ad tag URI, media ID and ads loader will share
      * the same ad playback state. To resume ad playback when recreating the playlist on returning
      * from the background, pass media items with the same ad tag URIs and media IDs to the player.
+     *
+     * <p>This method should only be called if {@link #setUri} is passed a non-null value.
      *
      * @param adTagUri The ad tag URI to load.
      */
@@ -434,12 +448,11 @@ public final class MediaItem {
     /**
      * Sets the optional ad tag {@link Uri}.
      *
-     * <p>If {@link #setUri} is passed a non-null {@code uri}, the ad tag URI is used to create a
-     * {@link PlaybackProperties} object. Otherwise it will be ignored.
-     *
      * <p>Media items in the playlist with the same ad tag URI, media ID and ads loader will share
      * the same ad playback state. To resume ad playback when recreating the playlist on returning
      * from the background, pass media items with the same ad tag URIs and media IDs to the player.
+     *
+     * <p>This method should only be called if {@link #setUri} is passed a non-null value.
      *
      * @param adTagUri The ad tag URI to load.
      */
@@ -450,12 +463,11 @@ public final class MediaItem {
     /**
      * Sets the optional ad tag {@link Uri} and ads identifier.
      *
-     * <p>If {@link #setUri} is passed a non-null {@code uri}, the ad tag URI is used to create a
-     * {@link PlaybackProperties} object. Otherwise it will be ignored.
-     *
      * <p>Media items in the playlist that have the same ads identifier and ads loader share the
      * same ad playback state. To resume ad playback when recreating the playlist on returning from
      * the background, pass the same ads IDs to the player.
+     *
+     * <p>This method should only be called if {@link #setUri} is passed a non-null value.
      *
      * @param adTagUri The ad tag URI to load.
      * @param adsId An opaque identifier for ad playback state associated with this item. Ad loading
@@ -540,8 +552,7 @@ public final class MediaItem {
      * published in the {@code com.google.android.exoplayer2.Timeline} of the source as {@code
      * com.google.android.exoplayer2.Timeline.Window#tag}.
      *
-     * <p>If {@link #setUri} is passed a non-null {@code uri}, the tag is used to create a {@link
-     * PlaybackProperties} object. Otherwise it will be ignored.
+     * <p>This method should only be called if {@link #setUri} is passed a non-null value.
      */
     public Builder setTag(@Nullable Object tag) {
       this.tag = tag;
@@ -582,10 +593,9 @@ public final class MediaItem {
                 customCacheKey,
                 subtitles,
                 tag);
-        mediaId = mediaId != null ? mediaId : uri.toString();
       }
       return new MediaItem(
-          checkNotNull(mediaId),
+          mediaId != null ? mediaId : DEFAULT_MEDIA_ID,
           new ClippingProperties(
               clipStartPositionMs,
               clipEndPositionMs,
@@ -599,7 +609,7 @@ public final class MediaItem {
               liveMaxOffsetMs,
               liveMinPlaybackSpeed,
               liveMaxPlaybackSpeed),
-          mediaMetadata != null ? mediaMetadata : new MediaMetadata.Builder().build());
+          mediaMetadata != null ? mediaMetadata : MediaMetadata.EMPTY);
     }
   }
 
@@ -836,7 +846,7 @@ public final class MediaItem {
   }
 
   /** Live playback configuration. */
-  public static final class LiveConfiguration {
+  public static final class LiveConfiguration implements Bundleable {
 
     /** A live playback configuration with unset values. */
     public static final LiveConfiguration UNSET =
@@ -929,6 +939,53 @@ public final class MediaItem {
       result = 31 * result + (minPlaybackSpeed != 0 ? Float.floatToIntBits(minPlaybackSpeed) : 0);
       result = 31 * result + (maxPlaybackSpeed != 0 ? Float.floatToIntBits(maxPlaybackSpeed) : 0);
       return result;
+    }
+
+    // Bundleable implementation.
+
+    @Documented
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({
+      FIELD_TARGET_OFFSET_MS,
+      FIELD_MIN_OFFSET_MS,
+      FIELD_MAX_OFFSET_MS,
+      FIELD_MIN_PLAYBACK_SPEED,
+      FIELD_MAX_PLAYBACK_SPEED
+    })
+    private @interface FieldNumber {}
+
+    private static final int FIELD_TARGET_OFFSET_MS = 0;
+    private static final int FIELD_MIN_OFFSET_MS = 1;
+    private static final int FIELD_MAX_OFFSET_MS = 2;
+    private static final int FIELD_MIN_PLAYBACK_SPEED = 3;
+    private static final int FIELD_MAX_PLAYBACK_SPEED = 4;
+
+    @Override
+    public Bundle toBundle() {
+      Bundle bundle = new Bundle();
+      bundle.putLong(keyForField(FIELD_TARGET_OFFSET_MS), targetOffsetMs);
+      bundle.putLong(keyForField(FIELD_MIN_OFFSET_MS), minOffsetMs);
+      bundle.putLong(keyForField(FIELD_MAX_OFFSET_MS), maxOffsetMs);
+      bundle.putFloat(keyForField(FIELD_MIN_PLAYBACK_SPEED), minPlaybackSpeed);
+      bundle.putFloat(keyForField(FIELD_MAX_PLAYBACK_SPEED), maxPlaybackSpeed);
+      return bundle;
+    }
+
+    /** Object that can restore {@link LiveConfiguration} from a {@link Bundle}. */
+    public static final Creator<LiveConfiguration> CREATOR =
+        bundle ->
+            new LiveConfiguration(
+                bundle.getLong(
+                    keyForField(FIELD_TARGET_OFFSET_MS), /* defaultValue= */ C.TIME_UNSET),
+                bundle.getLong(keyForField(FIELD_MIN_OFFSET_MS), /* defaultValue= */ C.TIME_UNSET),
+                bundle.getLong(keyForField(FIELD_MAX_OFFSET_MS), /* defaultValue= */ C.TIME_UNSET),
+                bundle.getFloat(
+                    keyForField(FIELD_MIN_PLAYBACK_SPEED), /* defaultValue= */ C.RATE_UNSET),
+                bundle.getFloat(
+                    keyForField(FIELD_MAX_PLAYBACK_SPEED), /* defaultValue= */ C.RATE_UNSET));
+
+    private static String keyForField(@LiveConfiguration.FieldNumber int field) {
+      return Integer.toString(field, Character.MAX_RADIX);
     }
   }
 
@@ -1029,7 +1086,7 @@ public final class MediaItem {
   }
 
   /** Optionally clips the media item to a custom start and end position. */
-  public static final class ClippingProperties {
+  public static final class ClippingProperties implements Bundleable {
 
     /** The start position in milliseconds. This is a value larger than or equal to zero. */
     public final long startPositionMs;
@@ -1095,7 +1152,58 @@ public final class MediaItem {
       result = 31 * result + (startsAtKeyFrame ? 1 : 0);
       return result;
     }
+
+    // Bundleable implementation.
+
+    @Documented
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({
+      FIELD_START_POSITION_MS,
+      FIELD_END_POSITION_MS,
+      FIELD_RELATIVE_TO_LIVE_WINDOW,
+      FIELD_RELATIVE_TO_DEFAULT_POSITION,
+      FIELD_STARTS_AT_KEY_FRAME
+    })
+    private @interface FieldNumber {}
+
+    private static final int FIELD_START_POSITION_MS = 0;
+    private static final int FIELD_END_POSITION_MS = 1;
+    private static final int FIELD_RELATIVE_TO_LIVE_WINDOW = 2;
+    private static final int FIELD_RELATIVE_TO_DEFAULT_POSITION = 3;
+    private static final int FIELD_STARTS_AT_KEY_FRAME = 4;
+
+    @Override
+    public Bundle toBundle() {
+      Bundle bundle = new Bundle();
+      bundle.putLong(keyForField(FIELD_START_POSITION_MS), startPositionMs);
+      bundle.putLong(keyForField(FIELD_END_POSITION_MS), endPositionMs);
+      bundle.putBoolean(keyForField(FIELD_RELATIVE_TO_LIVE_WINDOW), relativeToLiveWindow);
+      bundle.putBoolean(keyForField(FIELD_RELATIVE_TO_DEFAULT_POSITION), relativeToDefaultPosition);
+      bundle.putBoolean(keyForField(FIELD_STARTS_AT_KEY_FRAME), startsAtKeyFrame);
+      return bundle;
+    }
+
+    /** Object that can restore {@link ClippingProperties} from a {@link Bundle}. */
+    public static final Creator<ClippingProperties> CREATOR =
+        bundle ->
+            new ClippingProperties(
+                bundle.getLong(keyForField(FIELD_START_POSITION_MS), /* defaultValue= */ 0),
+                bundle.getLong(
+                    keyForField(FIELD_END_POSITION_MS), /* defaultValue= */ C.TIME_END_OF_SOURCE),
+                bundle.getBoolean(keyForField(FIELD_RELATIVE_TO_LIVE_WINDOW), false),
+                bundle.getBoolean(keyForField(FIELD_RELATIVE_TO_DEFAULT_POSITION), false),
+                bundle.getBoolean(keyForField(FIELD_STARTS_AT_KEY_FRAME), false));
+
+    private static String keyForField(@ClippingProperties.FieldNumber int field) {
+      return Integer.toString(field, Character.MAX_RADIX);
+    }
   }
+
+  /**
+   * The default media ID that is used if the media ID is not explicitly set by {@link
+   * Builder#setMediaId(String)}.
+   */
+  public static final String DEFAULT_MEDIA_ID = "";
 
   /** Identifies the media item. */
   public final String mediaId;
@@ -1156,5 +1264,88 @@ public final class MediaItem {
     result = 31 * result + clippingProperties.hashCode();
     result = 31 * result + mediaMetadata.hashCode();
     return result;
+  }
+
+  // Bundleable implementation.
+
+  @Documented
+  @Retention(RetentionPolicy.SOURCE)
+  @IntDef({
+    FIELD_MEDIA_ID,
+    FIELD_LIVE_CONFIGURATION,
+    FIELD_MEDIA_METADATA,
+    FIELD_CLIPPING_PROPERTIES
+  })
+  private @interface FieldNumber {}
+
+  private static final int FIELD_MEDIA_ID = 0;
+  private static final int FIELD_LIVE_CONFIGURATION = 1;
+  private static final int FIELD_MEDIA_METADATA = 2;
+  private static final int FIELD_CLIPPING_PROPERTIES = 3;
+
+  /**
+   * {@inheritDoc}
+   *
+   * <p>It omits the {@link #playbackProperties} field. The {@link #playbackProperties} of an
+   * instance restored by {@link #CREATOR} will always be {@code null}.
+   */
+  @Override
+  public Bundle toBundle() {
+    Bundle bundle = new Bundle();
+    bundle.putString(keyForField(FIELD_MEDIA_ID), mediaId);
+    bundle.putBundle(keyForField(FIELD_LIVE_CONFIGURATION), liveConfiguration.toBundle());
+    bundle.putBundle(keyForField(FIELD_MEDIA_METADATA), mediaMetadata.toBundle());
+    bundle.putBundle(keyForField(FIELD_CLIPPING_PROPERTIES), clippingProperties.toBundle());
+    return bundle;
+  }
+
+  /**
+   * Object that can restore {@link MediaItem} from a {@link Bundle}.
+   *
+   * <p>The {@link #playbackProperties} of a restored instance will always be {@code null}.
+   */
+  public static final Creator<MediaItem> CREATOR = MediaItem::fromBundle;
+
+  private static MediaItem fromBundle(Bundle bundle) {
+    String mediaId = checkNotNull(bundle.getString(keyForField(FIELD_MEDIA_ID), DEFAULT_MEDIA_ID));
+    @Nullable
+    Bundle liveConfigurationBundle = bundle.getBundle(keyForField(FIELD_LIVE_CONFIGURATION));
+    LiveConfiguration liveConfiguration;
+    if (liveConfigurationBundle == null) {
+      liveConfiguration = LiveConfiguration.UNSET;
+    } else {
+      liveConfiguration = LiveConfiguration.CREATOR.fromBundle(liveConfigurationBundle);
+    }
+    @Nullable Bundle mediaMetadataBundle = bundle.getBundle(keyForField(FIELD_MEDIA_METADATA));
+    MediaMetadata mediaMetadata;
+    if (mediaMetadataBundle == null) {
+      mediaMetadata = MediaMetadata.EMPTY;
+    } else {
+      mediaMetadata = MediaMetadata.CREATOR.fromBundle(mediaMetadataBundle);
+    }
+    @Nullable
+    Bundle clippingPropertiesBundle = bundle.getBundle(keyForField(FIELD_CLIPPING_PROPERTIES));
+    ClippingProperties clippingProperties;
+    if (clippingPropertiesBundle == null) {
+      clippingProperties =
+          new ClippingProperties(
+              /* startPositionMs= */ 0,
+              /* endPositionMs= */ C.TIME_END_OF_SOURCE,
+              /* relativeToLiveWindow= */ false,
+              /* relativeToDefaultPosition= */ false,
+              /* startsAtKeyFrame= */ false);
+    } else {
+      clippingProperties = ClippingProperties.CREATOR.fromBundle(clippingPropertiesBundle);
+    }
+    return new MediaItem(
+        mediaId,
+        clippingProperties,
+        /* playbackProperties= */ null,
+        liveConfiguration,
+        mediaMetadata);
+  }
+
+  private static String keyForField(@FieldNumber int field) {
+    return Integer.toString(field, Character.MAX_RADIX);
   }
 }

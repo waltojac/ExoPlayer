@@ -28,11 +28,11 @@ dependencies {
     androidTestImplementation 'androidx.test:rules:' + androidxTestRulesVersion
     androidTestImplementation 'androidx.test:runner:' + androidxTestRunnerVersion
     androidTestImplementation 'androidx.multidex:multidex:' + androidxMultidexVersion
+    androidTestImplementation 'com.linkedin.dexmaker:dexmaker-mockito:' + dexmakerVersion
     // Instrumentation tests assume that an app-packaged version of cronet is
     // available.
     androidTestImplementation 'org.chromium.net:cronet-embedded:72.3626.96'
-    androidTestImplementation(project(modulePrefix + 'testutils'))
-    testImplementation project(modulePrefix + 'library')
+    androidTestImplementation project(modulePrefix + 'testutils')
     testImplementation project(modulePrefix + 'testutils')
     testImplementation 'com.squareup.okhttp3:mockwebserver:' + mockWebServerVersion
     testImplementation 'org.robolectric:robolectric:' + robolectricVersion

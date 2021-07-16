@@ -20,13 +20,12 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.audio.AacUtil;
+import com.google.common.base.Ascii;
 import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Defines common MIME types and helper methods.
- */
+/** Defines common MIME types and helper methods. */
 public final class MimeTypes {
 
   public static final String BASE_TYPE_VIDEO = "video";
@@ -63,6 +62,8 @@ public final class MimeTypes {
   public static final String AUDIO_MPEG = BASE_TYPE_AUDIO + "/mpeg";
   public static final String AUDIO_MPEG_L1 = BASE_TYPE_AUDIO + "/mpeg-L1";
   public static final String AUDIO_MPEG_L2 = BASE_TYPE_AUDIO + "/mpeg-L2";
+  public static final String AUDIO_MPEGH_MHA1 = BASE_TYPE_AUDIO + "/mha1";
+  public static final String AUDIO_MPEGH_MHM1 = BASE_TYPE_AUDIO + "/mhm1";
   public static final String AUDIO_RAW = BASE_TYPE_AUDIO + "/raw";
   public static final String AUDIO_ALAW = BASE_TYPE_AUDIO + "/g711-alaw";
   public static final String AUDIO_MLAW = BASE_TYPE_AUDIO + "/g711-mlaw";
@@ -113,6 +114,7 @@ public final class MimeTypes {
   public static final String APPLICATION_EXIF = BASE_TYPE_APPLICATION + "/x-exif";
   public static final String APPLICATION_ICY = BASE_TYPE_APPLICATION + "/x-icy";
   public static final String APPLICATION_AIT = BASE_TYPE_APPLICATION + "/vnd.dvb.ait";
+  public static final String APPLICATION_RTSP = BASE_TYPE_APPLICATION + "/x-rtsp";
 
   public static final String IMAGE_JPEG = BASE_TYPE_IMAGE + "/jpeg";
 
@@ -340,7 +342,7 @@ public final class MimeTypes {
     if (codec == null) {
       return null;
     }
-    codec = Util.toLowerInvariant(codec.trim());
+    codec = Ascii.toLowerCase(codec.trim());
     if (codec.startsWith("avc1") || codec.startsWith("avc3")) {
       return MimeTypes.VIDEO_H264;
     } else if (codec.startsWith("hev1") || codec.startsWith("hvc1")) {
@@ -365,6 +367,10 @@ public final class MimeTypes {
         }
       }
       return mimeType == null ? MimeTypes.AUDIO_AAC : mimeType;
+    } else if (codec.startsWith("mha1")) {
+      return MimeTypes.AUDIO_MPEGH_MHA1;
+    } else if (codec.startsWith("mhm1")) {
+      return MimeTypes.AUDIO_MPEGH_MHM1;
     } else if (codec.startsWith("ac-3") || codec.startsWith("dac3")) {
       return MimeTypes.AUDIO_AC3;
     } else if (codec.startsWith("ec-3") || codec.startsWith("dec3")) {
